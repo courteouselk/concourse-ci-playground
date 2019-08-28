@@ -1,0 +1,7 @@
+.debug/
+.terraform/
+**/keys/
+**/*.log
+**/*.tfstate
+**/*.info
+**/*.backup

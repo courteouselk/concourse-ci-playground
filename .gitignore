@@ -1,7 +1,14 @@
+.keys/
+.ansible/
 .debug/
+.ssh/
+.temp/
 .terraform/
-**/keys/
+.virtualenv/
+.vscode/
 **/*.log
 **/*.tfstate
+**/*.tfvars
 **/*.info
 **/*.backup
+**/*.retry

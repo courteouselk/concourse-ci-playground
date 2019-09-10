@@ -1,0 +1,84 @@
+---
+# Deploys Docker Compose file for Concourse CI
+#
+# Inputs:
+#   - postgres_user
+#   - postgres_password
+#   - concourse_host
+#   - concourse_port
+#   - concourse_admin_user
+#   - concourse_admin_password
+- hosts: all
+  become: yes
+  vars:
+    concourse_home: /var/lib/concourse
+    concourse_user: concourse
+    concourse_uid: "1020"
+    concourse_group: concourse
+  tasks:
+    - name: Create "concourse" group
+      group:
+        name: concourse
+        state: present
+    - name: Create "concourse" user
+      user:
+        name: "{{ concourse_user }}"
+        uid: "{{ concourse_uid }}"
+        groups:
+          - "{{ concourse_group }}"
+          - "docker"
+        home: "{{ concourse_home }}"
+    - name: Create directory for web node keys
+      file:
+        path: "{{ concourse_home }}/keys/web"
+        state: directory
+        owner: "{{ concourse_user }}"
+        group: "{{ concourse_group }}"
+        mode: '0755'
+    - name: Create directory for worker node keys
+      file:
+        path: "{{ concourse_home }}/keys/worker"
+        state: directory
+        owner: "{{ concourse_user }}"
+        group: "{{ concourse_group }}"
+        mode: '0755'
+    - name: Generate session signing key for web node
+      command: "docker run --rm -v {{ concourse_home }}/keys/web:/keys concourse/concourse generate-key -t rsa -f /keys/session_signing_key"
+      args:
+        creates: "{{ concourse_home }}/keys/web/session_signing_key"
+    - name: Generate TSA host key for web node
+      command: "docker run --rm -v {{ concourse_home }}/keys/web:/keys concourse/concourse generate-key -t ssh -f /keys/tsa_host_key"
+      args:
+        creates: "{{ concourse_home }}/keys/web/tsa_host_key"
+    - name: Generate worker key
+      command: "docker run --rm -v {{ concourse_home }}/keys/worker:/keys concourse/concourse generate-key -t ssh -f /keys/worker_key"
+      args:
+        creates: "{{ concourse_home }}/keys/worker/worker_key"
+    - name: Copy public worker key to authorized worker keys directore on the web node
+      copy:
+        src: "{{ concourse_home }}/keys/worker/worker_key.pub"
+        dest: "{{ concourse_home }}/keys/web/authorized_worker_keys"
+        remote_src: yes
+    - name: Copy web node public key to the worker node
+      copy:
+        src: "{{ concourse_home }}/keys/web/tsa_host_key.pub"
+        dest: "{{ concourse_home }}/keys/worker/tsa_host_key.pub"
+        remote_src: yes
+    - name: Ensure ownership on generated keys subdirectory
+      file:
+        path: "{{ concourse_home }}/keys"
+        state: directory
+        recurse: yes
+        owner: "{{ concourse_user }}"
+        group: "{{ concourse_group }}"
+    - name: Deploy docker-compose file for Concourse CI
+      template:
+        src: docker-compose.yaml
+        dest: "{{ concourse_home }}/docker-compose.yaml"
+        owner: "{{ concourse_user }}"
+        group: "{{ concourse_group }}"
+        mode: '0644'
+    - name: Start Concourse CI
+      command: "docker-compose up --detach"
+      args:
+        chdir: "{{ concourse_home }}"

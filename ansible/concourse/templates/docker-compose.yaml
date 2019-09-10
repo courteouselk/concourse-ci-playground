@@ -1,0 +1,62 @@
+version: '3'
+
+services:
+  db:
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_DB: concourse
+      POSTGRES_USER: "{{ postgres_user }}"
+      POSTGRES_PASSWORD: "{{ postgres_password }}"
+    logging:
+      driver: json-file
+      options:
+        max-file: "5"
+        max-size: "10m"
+
+  web:
+    image: concourse/concourse
+    user: "{{ concourse_uid }}"
+    command: web
+    links:
+      - db
+    restart: always
+    depends_on:
+      - db
+    ports:
+      - "{{ concourse_port }}:8080"
+    volumes:
+      - ./keys/web:/concourse-keys
+    environment:
+      CONCOURSE_EXTERNAL_URL: "http://{{ concourse_host }}:{{ concourse_port }}"
+      CONCOURSE_POSTGRES_HOST: db
+      CONCOURSE_POSTGRES_USER: "{{ postgres_user }}"
+      CONCOURSE_POSTGRES_PASSWORD: "{{ postgres_password }}"
+      CONCOURSE_POSTGRES_DATABASE: concourse
+      CONCOURSE_ADD_LOCAL_USER: "{{ concourse_admin_user }}:{{ concourse_admin_password }}"
+      CONCOURSE_MAIN_TEAM_LOCAL_USER: "{{ concourse_admin_user }}"
+    logging:
+      driver: json-file
+      options:
+        max-file: "5"
+        max-size: "10m"
+
+  worker:
+    image: concourse/concourse
+    command: worker
+    privileged: true
+    restart: always
+    depends_on:
+      - web
+    volumes:
+      - ./keys/worker:/concourse-keys
+    links:
+      - web
+    stop_signal: SIGUSR2
+    environment:
+      CONCOURSE_TSA_HOST: web:2222
+    logging:
+      driver: json-file
+      options:
+        max-file: "5"
+        max-size: "10m"
